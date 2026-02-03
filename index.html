@@ -62,21 +62,8 @@
     player.src = "https://www.youtube.com/embed/" + id + "?" + params.toString();
   }
 
-  const url = new URL(location.href);
-  let rawValue = url.searchParams.get("v") || "";
-
-  if (!rawValue) {
-    const segments = url.pathname.split("/").filter(Boolean);
-    const lastSegment = segments[segments.length - 1] || "";
-    if (lastSegment.includes("=")) {
-      const inlineParams = new URLSearchParams(lastSegment);
-      rawValue = inlineParams.get("v") || "";
-    } else {
-      rawValue = lastSegment;
-    }
-  }
-
-  const id = extractVideoId(rawValue);
+  const v = new URL(location.href).searchParams.get("v") || "";
+  const id = extractVideoId(v);
   loadVideo(id);
 </script>
 </body>
