@@ -14,7 +14,7 @@
       overflow: hidden;
     }
     /* 讓播放器「自動吃滿」你放它的 iframe/容器大小 */
-    iframe {
+    #player, #player iframe {
       width: 100%;
       height: 100%;
       border: 0;
@@ -23,12 +23,11 @@
   </style>
 </head>
 <body>
-  <iframe id="player"
-    title="YouTube player"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-    allowfullscreen></iframe>
+  <div id="player"></div>
 
 <script>
+  var ytPlayer = null;
+
   function extractVideoId(text){
     if(!text) return "";
     text = text.trim();
@@ -48,23 +47,106 @@
   }
 
   function loadVideo(id){
-    const player = document.getElementById("player");
-    if(!id){
-      player.removeAttribute("src");
+    if(!id) return;
+    if(ytPlayer){
+      ytPlayer.loadVideoById(id);
       return;
     }
-    const params = new URLSearchParams({
-      autoplay: "1",
-      mute: "1",
-      playsinline: "1",
-      origin: location.origin
+    ytPlayer = new YT.Player("player", {
+      width: "100%",
+      height: "100%",
+      videoId: id,
+      playerVars: {
+        autoplay: 1,
+        mute: 1,
+        playsinline: 1,
+        origin: location.origin
+      },
+      events: {
+        onReady: function(e){
+          e.target.playVideo();
+        }
+      }
     });
-    player.src = "https://www.youtube.com/embed/" + id + "?" + params.toString();
   }
 
-  const v = new URL(location.href).searchParams.get("v") || "";
-  const id = extractVideoId(v);
-  loadVideo(id);
+  /* ── 浮動窗口音量控制 ── */
+  var _floatVolume = 30;
+  var _wasMaximized = false;
+  var _THRESHOLD = 40;
+
+  function _isMaximized(){
+    return (screen.availWidth - window.outerWidth) <= _THRESHOLD &&
+           (screen.availHeight - window.outerHeight) <= _THRESHOLD;
+  }
+
+  function _applyVolume(){
+    if(!ytPlayer) return;
+    ytPlayer.unMute();
+    ytPlayer.setVolume(Math.max(0, Math.min(100, _floatVolume)));
+  }
+
+  function _applyMute(){
+    if(!ytPlayer) return;
+    ytPlayer.mute();
+  }
+
+  function _checkWindowState(){
+    var maximized = _isMaximized();
+    if(!maximized && _wasMaximized){
+      // 從最大縮小到指定大小 → 套用音量
+      _applyVolume();
+    } else if(maximized && !_wasMaximized){
+      // 關閉指令，準備放到最大 → mute
+      _applyMute();
+    }
+    _wasMaximized = maximized;
+  }
+
+  window.addEventListener("resize", _checkWindowState);
+
+  // 初始狀態
+  _wasMaximized = _isMaximized();
+  if(!_wasMaximized) _applyVolume();
+
+  /* ── 接收外部 postMessage 指令來控制播放器 ── */
+  window.addEventListener("message", function(e){
+    if(!e.data || typeof e.data !== "object") return;
+    var action = e.data.action;
+    // 接收插件傳來的浮動窗口音量值
+    if(action === "floatVolume" && typeof e.data.value === "number"){
+      _floatVolume = Math.max(0, Math.min(100, e.data.value));
+      if(!_wasMaximized && ytPlayer) _applyVolume();
+      return;
+    }
+    if(!ytPlayer) return;
+    if(action === "setVolume" && typeof e.data.value === "number"){
+      ytPlayer.unMute();
+      ytPlayer.setVolume(Math.max(0, Math.min(100, e.data.value)));
+    } else if(action === "mute"){
+      ytPlayer.mute();
+    } else if(action === "unmute"){
+      ytPlayer.unMute();
+    } else if(action === "play"){
+      ytPlayer.playVideo();
+    } else if(action === "pause"){
+      ytPlayer.pauseVideo();
+    } else if(action === "load" && e.data.videoId){
+      var vid = extractVideoId(e.data.videoId);
+      if(vid) ytPlayer.loadVideoById(vid);
+    }
+  });
+
+  /* ── 載入 YouTube IFrame API ── */
+  var tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  var _videoId = extractVideoId(new URL(location.href).searchParams.get("v") || "");
+
+  function onYouTubeIframeAPIReady(){
+    if(_videoId) loadVideo(_videoId);
+  }
 </script>
 </body>
 </html>
