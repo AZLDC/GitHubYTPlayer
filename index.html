@@ -85,6 +85,11 @@
         ytPlayer.unMute();
       }
     }
+    if (event.data.action === "floatMute") {
+      if (ytPlayer && ytPlayer.mute) {
+        ytPlayer.mute();
+      }
+    }
   });
 </script>
 </body>
